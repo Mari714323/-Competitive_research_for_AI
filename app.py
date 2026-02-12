@@ -18,46 +18,50 @@ with st.sidebar:
     search_limit = st.slider("検索上限数", 1, 10, 5)
 
 # --- メイン画面：実行ボタン ---
-# --- app.py 修正版 (ボタン部分) ---
-
-# --- app.py 修正箇所 ---
-
 if st.button("調査を開始する", type="primary"):
     if not topic:
         st.warning("調査対象を入力してください。")
     else:
-        # セッションの初期化
+        # 実行前に前回の結果をクリアして真っさらにする
         st.session_state['df'] = None
         st.session_state['report'] = None
             
-        with st.status("🚀 AIエージェントが1回限りのリサーチを実行中...") as status:
-            # AIに「何度も考えず、1回で結果を出せ」と強く指示
-            research_task.description = f"「{topic}」の競合サービスを{search_limit}つ見つけ出し、名称とURLを特定してください。追加の検索は不要です。"
-            analysis_task.description = (
-                "受け取ったデータを元に簡単な分析レポートを書き、"
-                "末尾に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを出力してください。"
-            )
+        with st.status("🚀 AIエージェントが調査中...") as status:
+            # タスク指示
+            research_task.description = f"「{topic}」の市場を調査し、競合サービスをリストアップしてください。"
+            analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
             
-            crew = Crew(
-                agents=[researcher, writer],
-                tasks=[research_task, analysis_task],
-                process=Process.sequential
-            )
+            crew = Crew(agents=[researcher, writer], tasks=[research_task, analysis_task])
             
-            # 実行（この1回に今日の運命をかけます）
+            # 実行
             result = crew.kickoff(inputs={'topic': topic})
             
-            # --- JSON抽出処理 ---
+            # ★【ここがポイント】JSONの成功に関わらず、まずはレポートを保存する
+            st.session_state['report'] = str(result.raw)
+            
+            # JSONデータの抽出
             try:
                 import re
-                res_str = str(result.raw)
-                json_match = re.search(r'\[.*\]', res_str, re.DOTALL)
+                json_match = re.search(r'\[.*\]', str(result.raw), re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group())
                     st.session_state['df'] = pd.DataFrame(data)
-                    st.session_state['report'] = res_str
-                    status.update(label="✅ 完了！", state="complete")
+                    status.update(label="✅ 調査完了！", state="complete")
                 else:
-                    st.error("データの抽出に失敗しました。")
+                    # データ抽出に失敗してもレポートは見えるように、警告だけ出す
+                    st.warning("比較表の作成に必要なデータ形式が見つかりませんでした。レポートのみ表示します。")
+                    status.update(label="⚠️ 調査は完了しましたが表は作成できませんでした", state="complete")
             except Exception as e:
                 st.error(f"解析エラー: {e}")
+
+# レポートの表示（調査結果がある場合のみ表示）
+if 'report' in st.session_state and st.session_state['report']:
+    st.markdown("---")
+    st.subheader("📊 分析レポート")
+    st.markdown(st.session_state['report'])
+
+# 比較表の表示（データフレームがある場合のみ表示）
+if 'df' in st.session_state and st.session_state['df'] is not None:
+    st.markdown("---")
+    st.subheader("📋 競合比較表")
+    st.dataframe(st.session_state['df'])

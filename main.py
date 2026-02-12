@@ -41,6 +41,19 @@ writer = Agent(
     verbose=True
 )
 
+# 4. タスクの定義
+research_task = Task(
+    description='「{topic}」の市場を調査し、競合サービスをリストアップしてください。',
+    expected_output='各サービスの名称、URL、主な特徴。',
+    agent=researcher
+)
+
+analysis_task = Task(
+    description='リサーチ結果をもとに強みと弱点を分析し、最後に必ず指定されたJSON形式のリストを末尾に含めてください。',
+    expected_output='分析レポートと、[{"サービス名": "...", "URL": "...", "特徴": "..."}] 形式のJSONデータ。',
+    agent=writer
+)
+
 # 実行ガード（app.pyからのインポート時にAIが動くのを防ぎます）
 if __name__ == "__main__":
     pass # ターミナルからは実行しない

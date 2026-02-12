@@ -23,8 +23,11 @@ if st.button("調査を開始する", type="primary"):
         st.warning("調査対象を入力してください。")
     else:
         # 実行前に前回の結果をクリアして真っさらにする
+        # 実行前に前回の結果をクリア
         st.session_state['df'] = None
         st.session_state['report'] = None
+        # ★追加: ファイル名用にトピックを保存しておく
+        st.session_state['topic'] = topic
             
         with st.status("🚀 AIエージェントが調査中...") as status:
             # タスク指示
@@ -32,11 +35,8 @@ if st.button("調査を開始する", type="primary"):
             analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
             
             crew = Crew(agents=[researcher, writer], tasks=[research_task, analysis_task])
-            
-            # 実行
             result = crew.kickoff(inputs={'topic': topic})
             
-            # ★【ここがポイント】JSONの成功に関わらず、まずはレポートを保存する
             st.session_state['report'] = str(result.raw)
             
             # JSONデータの抽出
@@ -48,20 +48,39 @@ if st.button("調査を開始する", type="primary"):
                     st.session_state['df'] = pd.DataFrame(data)
                     status.update(label="✅ 調査完了！", state="complete")
                 else:
-                    # データ抽出に失敗してもレポートは見えるように、警告だけ出す
                     st.warning("比較表の作成に必要なデータ形式が見つかりませんでした。レポートのみ表示します。")
                     status.update(label="⚠️ 調査は完了しましたが表は作成できませんでした", state="complete")
             except Exception as e:
                 st.error(f"解析エラー: {e}")
 
-# レポートの表示（調査結果がある場合のみ表示）
+# ファイル名用にトピックを取得（もし無ければ "report" とする）
+file_prefix = st.session_state.get('topic', 'report')
+
+# レポートの表示
 if 'report' in st.session_state and st.session_state['report']:
     st.markdown("---")
     st.subheader("📊 分析レポート")
     st.markdown(st.session_state['report'])
+    
+    # ★追加: レポートのダウンロードボタン
+    st.download_button(
+        label="📄 レポートをダウンロード (Text)",
+        data=st.session_state['report'],
+        file_name=f"{file_prefix}_report.md",
+        mime="text/markdown"
+    )
 
-# 比較表の表示（データフレームがある場合のみ表示）
+# 比較表の表示
 if 'df' in st.session_state and st.session_state['df'] is not None:
     st.markdown("---")
     st.subheader("📋 競合比較表")
     st.dataframe(st.session_state['df'])
+    
+    # ★追加: CSVのダウンロードボタン
+    csv = st.session_state['df'].to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="💾 比較データをダウンロード (CSV)",
+        data=csv,
+        file_name=f"{file_prefix}_competitors.csv",
+        mime="text/csv"
+    )

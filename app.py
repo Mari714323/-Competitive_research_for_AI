@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from crewai import Crew, Process
-from main import researcher, writer, research_task, analysis_task # main.pyから流用
+from src.crew import researcher, writer, strategist, research_task, analysis_task, strategy_task
 import io
 import json
 import os
@@ -65,35 +65,61 @@ if st.button("調査を開始する", type="primary"):
             else:
                 st.session_state['df'] = None
                 
+        # 2. 履歴がないならAIを実行
         else:
-            # 履歴がない、または強制検索の場合はAIを実行
-            with st.status("🚀 AIエージェントが調査中...") as status:
-                # 前回同様のAI実行処理...
+            # 画面を真っさらに
+            st.session_state['df'] = None
+            st.session_state['report'] = None
+
+            with st.status("🚀 AIエージェントがチームで調査中...") as status:
+                # タスクの設定
                 research_task.description = f"「{topic}」の市場を調査し、競合サービスをリストアップしてください。"
                 analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
                 
-                crew = Crew(agents=[researcher, writer], tasks=[research_task, analysis_task])
+                # ★修正: エージェントとタスクを3人に増やす
+                crew = Crew(
+                    agents=[researcher, writer, strategist],
+                    tasks=[research_task, analysis_task, strategy_task],
+                    process=Process.sequential
+                )
+                
+                # 実行
                 result = crew.kickoff(inputs={'topic': topic})
                 
-                report_text = str(result.raw)
-                st.session_state['report'] = report_text
+                # ★ここが重要: 結果を 'swot_report' という変数に入れる
+                swot_report = str(result.raw)
+                st.session_state['report'] = swot_report
                 
-                # JSONデータの抽出と保存処理
-                df_data = None # 保存用
+                # 競合リスト(JSON)の抽出
+                # analysis_task の結果を取り出そうとするが、失敗したら swot_report を使う
+                try:
+                    # analysis_task はタスクリストの 2番目 (インデックス1) なので、
+                    # 本来はタスクオブジェクトから直接 output を取りたいが、
+                    # crewAIのバージョンによっては取りにくい場合があるため、安全策をとります。
+                    
+                    # analysis_task.output がもし空なら swot_report (全体) を対象にする
+                    if analysis_task.output:
+                        analysis_result = str(analysis_task.output.raw)
+                    else:
+                        analysis_result = swot_report
+                except:
+                    analysis_result = swot_report
+                
+                # JSONデータの抽出
+                df_data = None
                 try:
                     import re
-                    json_match = re.search(r'\[.*\]', report_text, re.DOTALL)
+                    json_match = re.search(r'\[.*\]', analysis_result, re.DOTALL)
                     if json_match:
-                        df_data = json.loads(json_match.group()) # リスト形式
+                        df_data = json.loads(json_match.group())
                         st.session_state['df'] = pd.DataFrame(df_data)
-                        status.update(label="✅ 調査完了！", state="complete")
+                        status.update(label="✅ 全工程完了！SWOT分析レポートができました", state="complete")
                     else:
                         st.session_state['df'] = None
-                        st.warning("比較表データが見つかりませんでした。")
-                        status.update(label="⚠️ 表作成スキップ", state="complete")
+                        status.update(label="⚠️ 分析は完了しましたが、比較表のデータが見つかりませんでした", state="complete")
                     
-                    # ★ここで履歴に保存！
-                    save_history_data(topic, report_text, df_data)
+                    # ★ここで定義済みの swot_report を使う
+                    save_history_data(topic, swot_report, df_data)
                     
                 except Exception as e:
                     st.error(f"解析エラー: {e}")

@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
-from search_tool import search_competitors
+from src.tools import search_competitors
 
 load_dotenv()
 
@@ -57,3 +57,22 @@ analysis_task = Task(
 # 実行ガード（app.pyからのインポート時にAIが動くのを防ぎます）
 if __name__ == "__main__":
     pass # ターミナルからは実行しない
+
+# 3人目のエージェント：戦略コンサルタント
+strategist = Agent(
+    role='戦略コンサルタント',
+    goal='競合調査レポートを元に、SWOT分析と具体的な戦略提案を行う',
+    backstory='あなたはMBAを持つ経験豊富な戦略コンサルタントです。市場の機会と脅威を鋭く読み解き、実行可能な戦略を立案するのが得意です。',
+    llm=gemini_llm,
+    max_iter=1,
+    allow_delegation=False,
+    verbose=True
+)
+
+# 3つ目のタスク：戦略立案
+strategy_task = Task(
+    description='これまでの調査結果と分析リストを元に、「{topic}」のSWOT分析（強み・弱み・機会・脅威）を行ってください。また、それに基づいた具体的な差別化戦略を3つ提案してください。',
+    expected_output='SWOT分析表（Markdown形式）と、3つの戦略提案を含んだ詳細なレポート。',
+    agent=strategist,
+    context=[research_task, analysis_task] # 前のタスクの結果を参照させる
+)

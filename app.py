@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 from crewai import Crew, Process
-from src.crew import researcher, writer, strategist, research_task, analysis_task, strategy_task
+from src.crew import (
+    researcher, writer, strategist, coach, persona,
+    research_task, analysis_task, strategy_task, coach_task, persona_task
+)
 import io
 import json
 import os
@@ -36,8 +39,24 @@ st.markdown("調査したい製品やサービス名を入力すると、AIが�
 with st.sidebar:
     st.header("設定")
     topic = st.text_input("調査対象の業種・製品", placeholder="例：個人向けタスク管理アプリ")
+    
+    # 検索のコツを表示
+    with st.expander("💡 検索のヒント"):
+        st.markdown("""
+        - **単語で入力**: 「〜について教えて」などの文章は不要です。
+        - **具体的に**: 「AI」より「営業支援AIツール」のように絞り込むと精度が上がります。
+        - **迷ったら**: 「誰のための」「何をするツール」かを書くとAIが理解しやすくなります。
+        """)
+        
     search_limit = st.slider("検索上限数", 1, 10, 5)
-    # ★追加: キャッシュを使うかどうかのスイッチ
+
+    st.markdown("---")
+    st.subheader("追加オプション")
+    use_strategy = st.checkbox("戦略立案（SWOT分析）", value=True)
+    use_coach = st.checkbox("アクションプラン提案", value=False)
+    use_persona = st.checkbox("ユーザーフィードバック", value=False)
+    
+    st.markdown("---")
     force_fetch = st.checkbox("強制的にWeb検索を行う", value=False, help="チェックを入れると履歴を無視してAPIを使用します")
 
 # --- メイン画面：実行ボタン ---
@@ -72,39 +91,64 @@ if st.button("調査を開始する", type="primary"):
             st.session_state['report'] = None
 
             with st.status("🚀 AIエージェントがチームで調査中...") as status:
-                # タスクの設定
+                # 1. 基本メンバーとタスク
+                my_agents = [researcher, writer]
+                my_tasks = [research_task, analysis_task]
+                
+                # 2. オプションに応じてメンバーを追加
+                if use_strategy:
+                    my_agents.append(strategist)
+                    my_tasks.append(strategy_task)
+                    st.write("🕵️ 戦略コンサルタントが参加しました")
+                
+                if use_coach:
+                    my_agents.append(coach)
+                    my_tasks.append(coach_task)
+                    st.write("🏃‍♂️ スタートアップ・コーチが参加しました")
+
+                if use_persona:
+                    my_agents.append(persona)
+                    my_tasks.append(persona_task)
+                    st.write("🗣️ 辛口ユーザーが参加しました")
+
+                # タスク記述のセット（ここは変わりません）
                 research_task.description = f"「{topic}」の市場を調査し、競合サービスをリストアップしてください。"
                 analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
                 
-                # ★修正: エージェントとタスクを3人に増やす
+                # 3. 動的に作ったチームで実行
                 crew = Crew(
-                    agents=[researcher, writer, strategist],
-                    tasks=[research_task, analysis_task, strategy_task],
+                    agents=my_agents,
+                    tasks=my_tasks,
                     process=Process.sequential
                 )
                 
-                # 実行
                 result = crew.kickoff(inputs={'topic': topic})
                 
-                # ★ここが重要: 結果を 'swot_report' という変数に入れる
-                swot_report = str(result.raw)
-                st.session_state['report'] = swot_report
+                # 全タスクの結果を結合して、豪華なレポートを作成する
+                full_report = ""
                 
-                # 競合リスト(JSON)の抽出
-                # analysis_task の結果を取り出そうとするが、失敗したら swot_report を使う
-                try:
-                    # analysis_task はタスクリストの 2番目 (インデックス1) なので、
-                    # 本来はタスクオブジェクトから直接 output を取りたいが、
-                    # crewAIのバージョンによっては取りにくい場合があるため、安全策をとります。
+                # result.tasks_output には、実行された全タスクの結果リストが入っています
+                for task_output in result.tasks_output:
+                    # 担当したエージェント名を取得（不明な場合は汎用名）
+                    agent_role = getattr(task_output, 'agent', '担当エージェント')
                     
-                    # analysis_task.output がもし空なら swot_report (全体) を対象にする
+                    # 見出しと内容をレポートに追加
+                    full_report += f"## 👤 {agent_role} の報告\n\n"
+                    full_report += str(task_output) + "\n\n---\n\n"
+                
+                # 結合した結果を保存
+                st.session_state['report'] = full_report
+                
+                # JSON抽出ロジック（ここは前回と同じですが、念のため再掲）
+                try:
+                    # analysis_taskの結果を取得（タスクが増減するので名前で探すのが安全ですが、簡易的に分析タスクは必ず2番目にあると仮定）
                     if analysis_task.output:
                         analysis_result = str(analysis_task.output.raw)
                     else:
-                        analysis_result = swot_report
+                        analysis_result = full_report
                 except:
-                    analysis_result = swot_report
-                
+                    analysis_result = full_report
+            
                 # JSONデータの抽出
                 df_data = None
                 try:
@@ -119,7 +163,7 @@ if st.button("調査を開始する", type="primary"):
                         status.update(label="⚠️ 分析は完了しましたが、比較表のデータが見つかりませんでした", state="complete")
                     
                     # ★ここで定義済みの swot_report を使う
-                    save_history_data(topic, swot_report, df_data)
+                    save_history_data(topic, full_report, df_data)
                     
                 except Exception as e:
                     st.error(f"解析エラー: {e}")

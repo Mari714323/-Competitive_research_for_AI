@@ -8,6 +8,7 @@ from src.crew import (
 import io
 import json
 import os
+import re
 
 # --- 履歴ファイルの保存先 ---
 HISTORY_FILE = "history.json"
@@ -173,15 +174,46 @@ if st.button("調査を開始する", type="primary"):
 file_prefix = st.session_state.get('topic', 'report')
 
 # レポートの表示
+file_prefix = st.session_state.get('topic', 'report')
+
+# レポートの表示（タブ化して見やすく！）
 if 'report' in st.session_state and st.session_state['report']:
     st.markdown("---")
     st.subheader("📊 分析レポート")
-    st.markdown(st.session_state['report'])
     
-    # ★追加: レポートのダウンロードボタン
+    report_text = st.session_state['report']
+    
+    # 正規表現を使って、「## 👤 {名前} の報告」という見出しごとにテキストを分割する
+    # splitの結果は [前置き, 名前1, 内容1, 名前2, 内容2...] というリストになります
+    # ※もしエージェント名変更等で分割がうまくいかない場合に備え、分割できなかった時の処理も入れています
+    try:
+        sections = re.split(r'## 👤 (.*?) の報告\n\n', report_text)
+        
+        # うまく分割できたらタブ表示にする
+        if len(sections) > 1:
+            # リストの奇数番目が「名前」、偶数番目が「内容」になります
+            roles = sections[1::2]
+            contents = sections[2::2]
+            
+            # エージェントの人数分だけタブを作成
+            tabs = st.tabs(roles)
+            
+            # 各タブに中身を書き込む
+            for i, tab in enumerate(tabs):
+                with tab:
+                    st.markdown(contents[i])
+        else:
+            # 分割できなかった場合はそのまま表示
+            st.markdown(report_text)
+            
+    except Exception as e:
+        # 万が一のエラー時はそのまま表示
+        st.markdown(report_text)
+    
+    # ダウンロードボタンはタブの外（共通）に置く
     st.download_button(
-        label="📄 レポートをダウンロード (Text)",
-        data=st.session_state['report'],
+        label="📄 レポート全文をダウンロード (Text)",
+        data=report_text,
         file_name=f"{file_prefix}_report.md",
         mime="text/markdown"
     )

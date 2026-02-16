@@ -37,44 +37,49 @@
 
 1. リポジトリをクローンします
    ```bash
-   git clone [https://github.com/Mari714323/-Competitive_research_for_AI.git](https://github.com/Mari714323/-Competitive_research_for_AI.git)
-   cd Competitive_research_for_AI
-仮想環境を作成し、依存ライブラリをインストールします
+   git clone https://github.com/Mari714323/-Competitive_research_for_AI.git
+   cd -Competitive_research_for_AI
+   ```
 
-Bash
-python -m venv .venv
-source .venv/bin/activate  # Windowsの場合: .venv\Scripts\activate
-pip install -r requirements.txt
-環境変数を設定します
-.env ファイルを作成し、APIキーを記述してください。
+2. 仮想環境を作成し、依存ライブラリをインストールします
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   # Windowsの場合: .venv\Scripts\activate
+   
+   pip install -r requirements.txt
+   ```
 
-Plaintext
-GEMINI_API_KEY=your_api_key_here
-🚀 使い方
-アプリケーションを起動します
+3. 環境変数を設定します
+   `.env` ファイルを作成し、APIキーを記述してください。
+   ```text
+   GEMINI_API_KEY=your_api_key_here
+   ```
 
-Bash
-python -m streamlit run app.py
-ブラウザが立ち上がるので、以下の項目を入力します
+## 🚀 使い方
 
-プロダクト名: 作りたいサービスの名前
+1. アプリケーションを起動します
+   ```bash
+   python -m streamlit run app.py
+   ```
 
-ターゲット: 誰のどんな課題を解決するか
+2. ブラウザが立ち上がるので、以下の項目を入力します
+   - **プロダクト名**: 作りたいサービスの名前
+   - **ターゲット**: 誰のどんな課題を解決するか
+   - **特徴・強み**: 競合との違いや解決策
 
-特徴・強み: 競合との違いや解決策
+3. 必要なオプション（戦略、コーチ、設計など）にチェックを入れ、「調査を開始する」をクリックします。
 
-必要なオプション（戦略、コーチ、設計など）にチェックを入れ、「調査を開始する」をクリックします。
+## 🛠️ 使用技術
 
-🛠️ 使用技術
-Frontend: Streamlit
+- **Frontend**: Streamlit
+- **AI Framework**: CrewAI
+- **LLM**: Google Gemini Pro
+- **Tools**: SerperDevTool (Google Search)
 
-AI Framework: CrewAI
+## 📂 ディレクトリ構成
 
-LLM: Google Gemini Pro
-
-Tools: SerperDevTool (Google Search)
-
-📂 ディレクトリ構成
+```text
 ai-research-agent/
 ├── app.py              # アプリケーションのエントリーポイント
 ├── src/
@@ -83,5 +88,4 @@ ai-research-agent/
 ├── history.json        # 検索履歴のキャッシュ（git管理外）
 ├── requirements.txt    # 依存ライブラリ
 └── README.md           # ドキュメント
-
-
+```

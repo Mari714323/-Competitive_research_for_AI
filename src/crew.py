@@ -113,3 +113,40 @@ persona_task = Task(
     agent=persona,
     context=[research_task] # 調査結果だけ見せればOK
 )
+
+# 6人目：プロダクトマネージャー（要件定義）
+pdm = Agent(
+    role='プロダクトマネージャー',
+    goal='曖昧なアイデアから、開発可能なレベルの「要件定義書」を作成する',
+    backstory='あなたは仕様策定のプロフェッショナルです。「何を作るか」を明確にし、抜け漏れのない機能リストと画面設計を定義します。開発者が迷わず実装できるドキュメント品質にこだわります。',
+    llm=gemini_llm,
+    max_iter=1,
+    allow_delegation=False,
+    verbose=True
+)
+
+# PdMのタスク
+requirements_task = Task(
+    description='「{topic}」のアイデアを元に、詳細な「要件定義書」を作成してください。以下の項目を含めてください：\n1. ユーザーストーリー（誰が何をしてどうなるか）\n2. 機能要件リスト（Must/Wantで優先度付け）\n3. 必要な画面リストとその機能',
+    expected_output='Markdown形式の要件定義書。',
+    agent=pdm
+)
+
+# 7人目：テックリード（基本設計）
+architect = Agent(
+    role='テックリード',
+    goal='要件定義を元に、最適な技術選定と「基本設計書」を作成する',
+    backstory='あなたはモダンな技術に精通したフルスタックエンジニアです。個人開発の規模感に合わせ、開発効率と保守性を両立できる技術選定（Next.js, Supabase, FastAPIなど）や、具体的なデータ構造の設計が得意です。',
+    llm=gemini_llm,
+    max_iter=1,
+    allow_delegation=False,
+    verbose=True
+)
+
+# テックリードのタスク
+design_task = Task(
+    description='要件定義書を元に、このアプリを開発するための「基本設計書」を作成してください。以下の項目を含めてください：\n1. 推奨技術スタック（Frontend, Backend, DB, Infra）とその選定理由\n2. データベース設計（テーブル定義とリレーションのER図イメージ）\n3. 主要なAPIエンドポイントの設計',
+    expected_output='Markdown形式の基本設計書（mermaid記法のER図を含む）。',
+    agent=architect,
+    context=[requirements_task] # PdMの成果物を参照させる
+)

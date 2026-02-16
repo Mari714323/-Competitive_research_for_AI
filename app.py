@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from src.crew import (
-    researcher, writer, strategist, coach, persona,
-    research_task, analysis_task, strategy_task, coach_task, persona_task
+    researcher, writer, strategist, coach, persona, pdm, architect,
+    research_task, analysis_task, strategy_task, coach_task, persona_task, requirements_task, design_task
 )
 from crewai import Crew, Process
 import json
@@ -79,6 +79,7 @@ with opt_col1:
     use_strategy = st.checkbox("🕵️ 戦略コンサル（SWOT分析）", value=True)
     use_coach = st.checkbox("🏃‍♂️ 起業コーチ（アクションプラン）", value=False)
     use_persona = st.checkbox("🗣️ 辛口ユーザー（フィードバック）", value=False)
+    use_design = st.checkbox("💻 システム設計（仕様書・設計書）", value=True)
 
 with opt_col2:
     st.markdown("**検索設定**")
@@ -135,6 +136,13 @@ if st.button("🚀 調査を開始する", type="primary"):
                     my_agents.append(persona)
                     my_tasks.append(persona_task)
                     st.write("🗣️ 辛口ユーザーが参加しました")
+
+                if use_design:
+                    my_agents.append(pdm)
+                    my_tasks.append(requirements_task)
+                    my_agents.append(architect)
+                    my_tasks.append(design_task)
+                    st.write("💻 開発チーム（PdM・テックリード）が参加しました")
 
                 # タスク記述のセット（トピックには詳細情報が全部入っています）
                 research_task.description = f"以下のプロダクト案について市場調査を行い、競合サービスをリストアップしてください。\n\n{topic}\n\n検索結果が英語であっても、報告は必ず日本語で行ってください。"

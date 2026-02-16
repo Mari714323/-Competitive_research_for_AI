@@ -174,6 +174,7 @@ if st.button("調査を開始する", type="primary"):
 file_prefix = st.session_state.get('topic', 'report')
 
 # レポートの表示
+
 file_prefix = st.session_state.get('topic', 'report')
 
 # レポートの表示（タブ化して見やすく！）
@@ -184,9 +185,8 @@ if 'report' in st.session_state and st.session_state['report']:
     report_text = st.session_state['report']
     
     # 正規表現を使って、「## 👤 {名前} の報告」という見出しごとにテキストを分割する
-    # splitの結果は [前置き, 名前1, 内容1, 名前2, 内容2...] というリストになります
-    # ※もしエージェント名変更等で分割がうまくいかない場合に備え、分割できなかった時の処理も入れています
     try:
+        # splitの結果は [前置き, 名前1, 内容1, 名前2, 内容2...] というリストになります
         sections = re.split(r'## 👤 (.*?) の報告\n\n', report_text)
         
         # うまく分割できたらタブ表示にする
@@ -203,11 +203,11 @@ if 'report' in st.session_state and st.session_state['report']:
                 with tab:
                     st.markdown(contents[i])
         else:
-            # 分割できなかった場合はそのまま表示
+            # 分割できなかった場合（昔のログなど）はそのまま表示
             st.markdown(report_text)
             
     except Exception as e:
-        # 万が一のエラー時はそのまま表示
+        # エラー時はそのまま表示
         st.markdown(report_text)
     
     # ダウンロードボタンはタブの外（共通）に置く
@@ -218,13 +218,12 @@ if 'report' in st.session_state and st.session_state['report']:
         mime="text/markdown"
     )
 
-# 比較表の表示
+# 比較表の表示（ここは変更なしですが、位置関係のため載せておきます）
 if 'df' in st.session_state and st.session_state['df'] is not None:
     st.markdown("---")
     st.subheader("📋 競合比較表")
     st.dataframe(st.session_state['df'])
     
-    # ★追加: CSVのダウンロードボタン
     csv = st.session_state['df'].to_csv(index=False).encode('utf-8')
     st.download_button(
         label="💾 比較データをダウンロード (CSV)",

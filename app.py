@@ -125,8 +125,21 @@ if st.button("🚀 調査を開始する", type="primary"):
 
                 # タスク記述の更新
                 research_task.description = f"以下のプロダクト案について市場調査を行い、競合サービスをリストアップしてください。\n\n{topic}\n\n検索結果が英語であっても、報告は必ず日本語で行ってください。"
-                analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
+                analysis_task.description = """
+                レポートを作成してください。
+                最後に、調査した競合サービス（3〜5つ）と、ユーザーのアイデア（自分のプロダクト）を比較するためのJSONデータを出力してください。
+                各サービスを以下の2軸で1〜10点で採点してください：
+                - functionality: 機能の豊富さ（1:単機能 〜 10:多機能・オールインワン）
+                - usability: 手軽さ・初心者への優しさ（1:難しい・専門的 〜 10:簡単・直感的）
                 
+                JSON形式:
+                [
+                    {"name": "競合A", "url": "...", "features": "...", "functionality": 7, "usability": 8, "type": "competitor"},
+                    {"name": "自分のプロダクト", "url": "-", "features": "...", "functionality": 5, "usability": 9, "type": "self"}
+                ]
+                必ずこのJSONブロックのみを最後に出力してください。
+                """
+
                 # 実行
                 crew = Crew(
                     agents=my_agents,
@@ -153,13 +166,18 @@ if st.button("🚀 調査を開始する", type="primary"):
                 extracted_data = extract_json_from_text(full_report)
                 
                 if extracted_data:
-                    df_data = extracted_data
+                    # ★修正: データが「リスト」じゃなかったら、リストに入れてあげる（重要！）
+                    if isinstance(extracted_data, list):
+                         df_data = extracted_data
+                    else:
+                         df_data = [extracted_data]
+                    
                     st.session_state['df'] = pd.DataFrame(df_data)
                     status.update(label="✅ 全工程完了！レポートができました", state="complete")
                 else:
                     st.session_state['df'] = None
                     status.update(label="⚠️ 分析完了（比較表データなし）", state="complete")
-                
+
                 # 履歴に保存
                 save_history_data(topic, full_report, df_data)
 
@@ -194,8 +212,27 @@ if 'report' in st.session_state and st.session_state['report']:
 if 'df' in st.session_state and st.session_state['df'] is not None:
     st.markdown("---")
     st.subheader("📋 競合比較表")
+    
+    # データフレームの表示
     st.dataframe(st.session_state['df'])
     
+    # ポジショニングマップの表示
+    # データに点数カラムがあるか確認
+    df = st.session_state['df']
+    if 'functionality' in df.columns and 'usability' in df.columns:
+        st.subheader("🗺️ ポジショニングマップ")
+        st.info("縦軸：機能の豊富さ（高いほど多機能） / 横軸：手軽さ（右に行くほど簡単）")
+        
+        # 散布図の作成
+        st.scatter_chart(
+            df,
+            x='usability',
+            y='functionality',
+            color='name', # 色でサービスを区別
+            size=100,     # ドットのサイズ
+        )
+    
+    # CSVダウンロードボタン（元の位置のまま）
     csv = st.session_state['df'].to_csv(index=False).encode('utf-8')
     st.download_button(
         label="💾 比較データをダウンロード (CSV)",

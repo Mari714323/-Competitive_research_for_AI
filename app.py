@@ -4,36 +4,17 @@ from src.crew import (
     researcher, writer, strategist, coach, persona, pdm, architect,
     research_task, analysis_task, strategy_task, coach_task, persona_task, requirements_task, design_task
 )
+from src.utils import (
+    load_history_data, save_history_data, clean_topic_name, 
+    extract_json_from_text, split_report_by_agent
+)
 from crewai import Crew, Process
-import json
-import os
-import re
 
 # --- ページ設定 ---
 st.set_page_config(page_title="AI 競合調査エージェント", layout="wide")
 
 st.title("🤖 AI 起業アイデア壁打ちエージェント")
 st.markdown("あなたの起業アイデアを入力してください。AIチームが市場調査から戦略立案まで行います。")
-
-# --- 履歴ファイルの保存先 ---
-HISTORY_FILE = "history.json"
-
-def load_history_data():
-    """履歴ファイルを読み込む"""
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-def save_history_data(topic, report, df_data):
-    """結果を履歴ファイルに保存する"""
-    history = load_history_data()
-    history[topic] = {
-        "report": report,
-        "df_data": df_data
-    }
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=4)
 
 # --- メイン画面：ヒアリングシート ---
 st.markdown("### 📝 アイデア・ヒアリングシート")
@@ -68,7 +49,7 @@ if product_name:
 else:
     topic = ""
 
-# --- 設定エリア（メイン画面に移動） ---
+# --- 設定エリア ---
 st.markdown("---")
 st.subheader("⚙️ 調査オプション")
 
@@ -86,21 +67,20 @@ with opt_col2:
     search_limit = st.slider("検索上限数", 1, 10, 5, help="AIが参考にするWebサイトの数です。多いほど時間はかかりますが情報量が増えます。")
     force_fetch = st.checkbox("強制的にWeb検索を行う", value=False, help="チェックを入れると、過去の履歴を使わずに最新の情報を取得し直します。")
 
-st.markdown("") # 少し余白
+st.markdown("") # 余白
 
 # --- 実行ボタン ---
 if st.button("🚀 調査を開始する", type="primary"):
     if not product_name:
         st.warning("まずは「プロダクト名」を入力してください。")
     else:
-        # ファイル名用にトピックを保存（ファイル名に使えない文字を除去）
-        safe_topic_name = re.sub(r'[\\/:*?"<>|]+', '', product_name)
+        # トピック名の安全化
+        safe_topic_name = clean_topic_name(product_name)
         st.session_state['topic'] = safe_topic_name
         
         # 1. 履歴の確認
         history = load_history_data()
         
-        # 履歴があり、かつ「強制検索」がOFFなら履歴を使う
         if topic in history and not force_fetch:
             st.info(f"📜 「{product_name}」の過去の調査履歴が見つかりました。APIを使わずに表示します。")
             cached_data = history[topic]
@@ -111,17 +91,16 @@ if st.button("🚀 調査を開始する", type="primary"):
             else:
                 st.session_state['df'] = None
         
-        # 2. 履歴がないならAIを実行
+        # 2. AI実行
         else:
             st.session_state['df'] = None
             st.session_state['report'] = None
 
             with st.status("🚀 AIエージェントチームが調査中...") as status:
-                # 1. 基本メンバーとタスク
+                # チーム編成
                 my_agents = [researcher, writer]
                 my_tasks = [research_task, analysis_task]
                 
-                # 2. オプションに応じてメンバーを追加
                 if use_strategy:
                     my_agents.append(strategist)
                     my_tasks.append(strategy_task)
@@ -144,11 +123,11 @@ if st.button("🚀 調査を開始する", type="primary"):
                     my_tasks.append(design_task)
                     st.write("💻 開発チーム（PdM・テックリード）が参加しました")
 
-                # タスク記述のセット（トピックには詳細情報が全部入っています）
+                # タスク記述の更新
                 research_task.description = f"以下のプロダクト案について市場調査を行い、競合サービスをリストアップしてください。\n\n{topic}\n\n検索結果が英語であっても、報告は必ず日本語で行ってください。"
                 analysis_task.description = "レポートを作成し、最後に必ず [{\"サービス名\": \"...\", \"URL\": \"...\", \"特徴\": \"...\"}] 形式のJSONを含めてください。"
                 
-                # 3. チーム実行
+                # 実行
                 crew = Crew(
                     agents=my_agents,
                     tasks=my_tasks,
@@ -157,7 +136,7 @@ if st.button("🚀 調査を開始する", type="primary"):
                 
                 result = crew.kickoff(inputs={'topic': topic})
                 
-                # 全タスクの結果を結合
+                # 結果の結合
                 full_report = ""
                 for task_output in result.tasks_output:
                     agent_role = getattr(task_output, 'agent', '担当エージェント')
@@ -166,34 +145,26 @@ if st.button("🚀 調査を開始する", type="primary"):
                 
                 st.session_state['report'] = full_report
                 
-                # JSONデータの抽出
-                try:
-                    if analysis_task.output:
-                        analysis_result = str(analysis_task.output.raw)
-                    else:
-                        analysis_result = full_report
-                except:
-                    analysis_result = full_report
-                
+                # JSONデータの抽出（utils関数を使用）
                 df_data = None
-                try:
-                    json_match = re.search(r'\[.*\]', analysis_result, re.DOTALL)
-                    if json_match:
-                        df_data = json.loads(json_match.group())
-                        st.session_state['df'] = pd.DataFrame(df_data)
-                        status.update(label="✅ 全工程完了！レポートができました", state="complete")
-                    else:
-                        st.session_state['df'] = None
-                        status.update(label="⚠️ 分析完了（比較表データなし）", state="complete")
-                    
-                    # 履歴に保存
-                    save_history_data(topic, full_report, df_data)
-                    
-                except Exception as e:
-                    st.error(f"解析エラー: {e}")
+                
+                # analysis_taskの結果からJSONを探す（もしanalysis_taskがあれば）
+                # ※タスクリストの順番が変わっても大丈夫なように、output.raw全体から探す簡易的な方法をとります
+                extracted_data = extract_json_from_text(full_report)
+                
+                if extracted_data:
+                    df_data = extracted_data
+                    st.session_state['df'] = pd.DataFrame(df_data)
+                    status.update(label="✅ 全工程完了！レポートができました", state="complete")
+                else:
+                    st.session_state['df'] = None
+                    status.update(label="⚠️ 分析完了（比較表データなし）", state="complete")
+                
+                # 履歴に保存
+                save_history_data(topic, full_report, df_data)
 
 
-# --- 結果表示エリア（タブ表示） ---
+# --- 結果表示エリア ---
 file_prefix = st.session_state.get('topic', 'report')
 
 if 'report' in st.session_state and st.session_state['report']:
@@ -202,21 +173,15 @@ if 'report' in st.session_state and st.session_state['report']:
     
     report_text = st.session_state['report']
     
-    try:
-        sections = re.split(r'## 👤 (.*?) の報告\n\n', report_text)
-        
-        if len(sections) > 1:
-            roles = sections[1::2]
-            contents = sections[2::2]
-            
-            tabs = st.tabs(roles)
-            for i, tab in enumerate(tabs):
-                with tab:
-                    st.markdown(contents[i])
-        else:
-            st.markdown(report_text)
-            
-    except Exception as e:
+    # utils関数を使って分割
+    roles, contents = split_report_by_agent(report_text)
+    
+    if roles:
+        tabs = st.tabs(roles)
+        for i, tab in enumerate(tabs):
+            with tab:
+                st.markdown(contents[i])
+    else:
         st.markdown(report_text)
     
     st.download_button(
